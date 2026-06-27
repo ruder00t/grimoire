@@ -75,10 +75,11 @@ run_priv chmod a+r "$SOURCE" 2>/dev/null || chmod a+r "$SOURCE" 2>/dev/null || t
 # Install a small launcher so grim.py needs neither an execute bit nor a
 # specific owner. It runs grim.py with the python3 found at install time.
 tmp="$(mktemp)"
+# Delete the temporary file on script exit, just in case put_launcher fails.
+trap 'rm -f "$tmp"' EXIT
 printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PY" "$SOURCE" > "$tmp"
 chmod 0755 "$tmp"
 put_launcher "$tmp"
-rm -f "$tmp"
 echo "Installed $TARGET (runs $SOURCE)"
 
 case ":$PATH:" in
