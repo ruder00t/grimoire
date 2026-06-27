@@ -1,4 +1,4 @@
-=== Grimoire ====
+==== GRIMOIRE =====
 
 A small command-line tool for storing and recalling shell commands. Commands
 are grouped into named chapters (typically one per tool), and reusable
