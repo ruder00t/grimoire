@@ -13,8 +13,9 @@ rendered.
 
 === Installation ===
 
-Clone the repository and run the install script. It links `grim` onto your
-PATH (into `~/.local/bin`) and installs a clipboard tool if you don't have one:
+Clone the repository and run the install script. Run it **without** `sudo` — it
+asks for your password only if it actually needs root (to write
+`/usr/local/bin` or install a clipboard package):
 
 ```
 git clone https://github.com/YOUR-USERNAME/grimoire.git
@@ -22,27 +23,27 @@ cd grimoire
 bash install.sh
 ```
 
-If `~/.local/bin` is not on your PATH, the script prints the one line to add to
-your shell config. To remove the link later, run `bash install.sh --uninstall`.
+This places a small launcher at `/usr/local/bin/grim` that runs `grim.py` from
+the repository, and installs a clipboard tool if you don't have one. Because
+`/usr/local/bin` is on the default PATH, `grim` works immediately. `grim.py`
+itself is never modified, so `git pull` keeps the command up to date. To remove
+it, run `bash install.sh --uninstall`.
 
-The install uses a symlink, so `git pull` updates the installed command
-automatically.
+To install into a directory you own instead (no root needed), set `BINDIR`:
+
+```
+BINDIR="$HOME/.local/bin" bash install.sh
+```
+
+(If that directory isn't on your PATH, the script tells you the line to add.)
 
 === Manual install ===
 
-If you'd rather not run the script:
+Create the launcher yourself:
 
 ```
-chmod +x grim.py
-mkdir -p ~/.local/bin
-ln -s "$PWD/grim.py" ~/.local/bin/grim
-```
-
-If `~/.local/bin` is not already on your PATH, add this line to your shell
-config (`~/.bashrc` or `~/.zshrc`) and start a new shell:
-
-```
-export PATH="$HOME/.local/bin:$PATH"
+printf '#!/bin/sh\nexec python3 "%s" "$@"\n' "$PWD/grim.py" | sudo tee /usr/local/bin/grim >/dev/null
+sudo chmod +x /usr/local/bin/grim
 ```
 
 Confirm it works:
