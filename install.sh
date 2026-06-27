@@ -3,12 +3,41 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE="$SCRIPT_DIR/grim.py"
-BINDIR="${BINDIR:-$HOME/.local/bin}"
+BINDIR="${BINDIR:-/usr/local/bin}"
 TARGET="$BINDIR/grim"
 
+run_priv() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo "$@"
+    else
+        echo "error: root privileges required for: $*" >&2
+        return 1
+    fi
+}
+
+bindir_writable() {
+    if [ -d "$BINDIR" ]; then
+        [ -w "$BINDIR" ]
+    else
+        [ -w "$(dirname "$BINDIR")" ]
+    fi
+}
+
+put_launcher() {
+    if bindir_writable; then
+        mkdir -p "$BINDIR"
+        install -m 0755 "$1" "$TARGET"
+    else
+        run_priv mkdir -p "$BINDIR"
+        run_priv install -m 0755 "$1" "$TARGET"
+    fi
+}
+
 if [ "${1:-}" = "--uninstall" ]; then
-    if [ -L "$TARGET" ]; then
-        rm -f "$TARGET"
+    if [ -e "$TARGET" ]; then
+        if bindir_writable; then rm -f "$TARGET"; else run_priv rm -f "$TARGET"; fi
         echo "Removed $TARGET"
     else
         echo "Nothing to remove at $TARGET"
@@ -21,27 +50,42 @@ if [ ! -f "$SOURCE" ]; then
     exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
+PY="$(command -v python3 || true)"
+if [ -z "$PY" ]; then
     echo "error: python3 is not installed or not on PATH." >&2
     exit 1
 fi
 
-if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)'; then
+if ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)'; then
     echo "error: Python 3.8 or newer is required." >&2
     exit 1
 fi
 
-chmod +x "$SOURCE"
-mkdir -p "$BINDIR"
-ln -sf "$SOURCE" "$TARGET"
-echo "Linked $TARGET -> $SOURCE"
+if ! bindir_writable && [ "$(id -u)" -ne 0 ] && ! command -v sudo >/dev/null 2>&1; then
+    echo "error: cannot write $BINDIR and sudo is unavailable." >&2
+    echo "Re-run as root, or install somewhere you own:" >&2
+    echo "    BINDIR=\"\$HOME/.local/bin\" bash install.sh" >&2
+    exit 1
+fi
+
+# Ensure grim.py is readable by everyone (does not touch the executable bit,
+# so git sees no change); best-effort.
+run_priv chmod a+r "$SOURCE" 2>/dev/null || chmod a+r "$SOURCE" 2>/dev/null || true
+
+# Install a small launcher so grim.py needs neither an execute bit nor a
+# specific owner. It runs grim.py with the python3 found at install time.
+tmp="$(mktemp)"
+printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$PY" "$SOURCE" > "$tmp"
+chmod 0755 "$tmp"
+put_launcher "$tmp"
+rm -f "$tmp"
+echo "Installed $TARGET (runs $SOURCE)"
 
 case ":$PATH:" in
     *":$BINDIR:"*) ;;
     *)
         echo
-        echo "note: $BINDIR is not on your PATH."
-        echo "Add this to your ~/.bashrc or ~/.zshrc, then open a new shell:"
+        echo "note: $BINDIR is not on your PATH. Add it to your shell config:"
         echo "    export PATH=\"$BINDIR:\$PATH\""
         ;;
 esac
@@ -65,13 +109,13 @@ else
     echo "No clipboard tool found; installing $pkg..."
     installed=1
     if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get install -y "$pkg" && installed=0
+        run_priv apt-get install -y "$pkg" && installed=0
     elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y "$pkg" && installed=0
+        run_priv dnf install -y "$pkg" && installed=0
     elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -S --noconfirm "$pkg" && installed=0
+        run_priv pacman -S --noconfirm "$pkg" && installed=0
     elif command -v zypper >/dev/null 2>&1; then
-        sudo zypper install -y "$pkg" && installed=0
+        run_priv zypper install -y "$pkg" && installed=0
     else
         echo "No supported package manager found."
         echo "Install one of wl-clipboard / xclip / xsel manually."
